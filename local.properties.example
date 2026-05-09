@@ -1,0 +1,9 @@
+# Copy this file to local.properties and fill in values.
+# Do NOT commit local.properties to source control.
+
+# Android SDK path — use your Windows Android Studio SDK location:
+sdk.dir=/mnt/c/Users/alanm/AppData/Local/Android/Sdk
+
+# IGDB / Twitch credentials (create a free app at https://dev.twitch.tv/console):
+igdb.clientId=YOUR_TWITCH_CLIENT_ID
+igdb.clientSecret=YOUR_TWITCH_CLIENT_SECRET
