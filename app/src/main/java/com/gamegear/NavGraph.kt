@@ -28,6 +28,7 @@ import com.gamegear.ui.detail.GameDetailScreen
 import com.gamegear.ui.gallery.ImageGalleryScreen
 import com.gamegear.ui.imagepicker.ImagePickerScreen
 import com.gamegear.ui.list.GameListScreen
+import com.gamegear.ui.settings.SettingsScreen
 import kotlinx.coroutines.delay
 
 @Composable
@@ -39,8 +40,16 @@ fun NavGraph(repository: GameRepository) {
     var selectedGameId by rememberSaveable { mutableStateOf<Int?>(null) }
     var galleryGameId by rememberSaveable { mutableStateOf<Int?>(null) }
     var imagePickerGameId by rememberSaveable { mutableStateOf<Int?>(null) }
+    var settingsOpen by rememberSaveable { mutableStateOf(false) }
 
-    // Full-screen overlays — shown on top of whatever layout is active
+    // Full-screen overlays shown on top of whatever layout is active
+    if (settingsOpen) {
+        SettingsScreen(
+            repository = repository,
+            onDismiss = { settingsOpen = false },
+        )
+        return
+    }
     if (imagePickerGameId != null) {
         ImagePickerScreen(
             gameId = imagePickerGameId!!,
@@ -69,8 +78,6 @@ fun NavGraph(repository: GameRepository) {
     }
 
     if (isWideLayout) {
-        // Wide (unfolded inner screen): always show list + detail side by side.
-        // System back exits the app (with toast warning) since there's no pane to pop.
         BackHandler {
             if (exitWarningShown) {
                 (context as Activity).finish()
@@ -81,17 +88,17 @@ fun NavGraph(repository: GameRepository) {
         }
 
         Row(modifier = Modifier.fillMaxSize()) {
-            // List pane — fixed width
             GameListScreen(
                 repository = repository,
                 onGameClick = { selectedGameId = it },
+                onOpenSettings = { settingsOpen = true },
+                onFindImages = { imagePickerGameId = it },
                 scrollState = listScrollState,
                 modifier = Modifier
-                    .width(320.dp)
+                    .weight(1f)
                     .fillMaxHeight(),
             )
 
-            // Pane divider
             Box(
                 modifier = Modifier
                     .width(1.dp)
@@ -99,7 +106,6 @@ fun NavGraph(repository: GameRepository) {
                     .background(MaterialTheme.colorScheme.surfaceVariant),
             )
 
-            // Detail pane — fills remaining space
             Box(
                 modifier = Modifier
                     .weight(1f)
@@ -130,9 +136,7 @@ fun NavGraph(repository: GameRepository) {
             }
         }
     } else {
-        // Narrow (folded / outer screen): single pane, navigate between list and detail.
         if (selectedGameId != null) {
-            // Detail is showing — back returns to list
             BackHandler { selectedGameId = null }
             GameDetailScreen(
                 gameId = selectedGameId!!,
@@ -142,7 +146,6 @@ fun NavGraph(repository: GameRepository) {
                 onFindImages = { imagePickerGameId = selectedGameId },
             )
         } else {
-            // List is showing — back exits with warning
             BackHandler {
                 if (exitWarningShown) {
                     (context as Activity).finish()
@@ -154,6 +157,8 @@ fun NavGraph(repository: GameRepository) {
             GameListScreen(
                 repository = repository,
                 onGameClick = { selectedGameId = it },
+                onOpenSettings = { settingsOpen = true },
+                onFindImages = { imagePickerGameId = it },
                 scrollState = listScrollState,
             )
         }

@@ -21,7 +21,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.ImageSearch
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
@@ -56,6 +59,8 @@ import com.gamegear.network.GameImageUrl
 fun GameListScreen(
     repository: GameRepository,
     onGameClick: (Int) -> Unit,
+    onOpenSettings: () -> Unit,
+    onFindImages: (Int) -> Unit,
     modifier: Modifier = Modifier,
     scrollState: LazyListState = rememberLazyListState(),
 ) {
@@ -72,6 +77,13 @@ fun GameListScreen(
                 TopAppBar(
                     title = { Text("Alan's Game Gear List") },
                     actions = {
+                        IconButton(onClick = onOpenSettings) {
+                            Icon(
+                                Icons.Default.Settings,
+                                contentDescription = "Settings",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
                         Image(
                             painter = painterResource(id = R.drawable.app_icon),
                             contentDescription = null,
@@ -118,7 +130,11 @@ fun GameListScreen(
                 modifier = Modifier.padding(innerPadding),
             ) {
                 items(games, key = { it.id }) { game ->
-                    GameRow(game = game, onClick = { onGameClick(game.id) })
+                    GameRow(
+                        game = game,
+                        onClick = { onGameClick(game.id) },
+                        onFindImages = { onFindImages(game.id) },
+                    )
                     HorizontalDivider(
                         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
                         thickness = 0.5.dp,
@@ -205,7 +221,7 @@ private fun SearchField(
 }
 
 @Composable
-private fun GameRow(game: GameEntity, onClick: () -> Unit) {
+private fun GameRow(game: GameEntity, onClick: () -> Unit, onFindImages: () -> Unit) {
     val isOwned = game.japanOwned == true || game.usaOwned == true || game.europeOwned == true
     Row(
         modifier = Modifier
@@ -214,20 +230,34 @@ private fun GameRow(game: GameEntity, onClick: () -> Unit) {
             .padding(horizontal = 16.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Surface(
+        Box(
             modifier = Modifier
                 .size(width = 56.dp, height = 76.dp)
-                .clip(RoundedCornerShape(6.dp)),
-            color = MaterialTheme.colorScheme.surfaceVariant,
+                .clip(RoundedCornerShape(6.dp))
+                .clickable(onClick = onFindImages),
         ) {
-            if (game.coverImageId != null) {
-                AsyncImage(
-                    model = GameImageUrl.thumbnail(game.coverImageId),
-                    contentDescription = game.title,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier.fillMaxSize(),
-                )
+            Surface(
+                modifier = Modifier.fillMaxSize(),
+                color = MaterialTheme.colorScheme.surfaceVariant,
+            ) {
+                if (game.coverImageId != null) {
+                    AsyncImage(
+                        model = GameImageUrl.thumbnail(game.coverImageId),
+                        contentDescription = game.title,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                }
             }
+            Icon(
+                Icons.Default.ImageSearch,
+                contentDescription = "Find image",
+                tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.35f),
+                modifier = Modifier
+                    .size(16.dp)
+                    .align(Alignment.BottomEnd)
+                    .padding(bottom = 3.dp, end = 3.dp),
+            )
         }
 
         Spacer(Modifier.width(14.dp))

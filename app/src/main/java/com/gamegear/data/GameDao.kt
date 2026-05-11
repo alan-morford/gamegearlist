@@ -31,6 +31,19 @@ interface GameDao {
     @Query("SELECT * FROM games ORDER BY title ASC")
     suspend fun getAllGamesList(): List<GameEntity>
 
+    @Query("SELECT * FROM games WHERE coverImageId IS NULL ORDER BY title ASC")
+    suspend fun getGamesWithoutImages(): List<GameEntity>
+
+    @Query("""
+        UPDATE games
+        SET japanOwned  = CASE WHEN japanOwned  IS NOT NULL THEN 0 ELSE NULL END,
+            usaOwned    = CASE WHEN usaOwned    IS NOT NULL THEN 0 ELSE NULL END,
+            europeOwned = CASE WHEN europeOwned IS NOT NULL THEN 0 ELSE NULL END,
+            owned = 0,
+            notes = NULL
+    """)
+    suspend fun resetOwnershipAndNotes()
+
     @Query("UPDATE games SET igdbId = :igdbId, coverImageId = :coverImageId, screenshotIds = :screenshotIds WHERE id = :id")
     suspend fun updateImages(id: Int, igdbId: Int?, coverImageId: String?, screenshotIds: String?)
 

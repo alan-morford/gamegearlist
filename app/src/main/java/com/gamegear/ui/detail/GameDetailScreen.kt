@@ -74,7 +74,7 @@ fun GameDetailScreen(
         modifier = modifier,
         topBar = {
             TopAppBar(
-                title = { Text(game?.title ?: "") },
+                title = { },
                 navigationIcon = {
                     if (showBackButton) {
                         IconButton(onClick = onBack) {
@@ -109,20 +109,34 @@ fun GameDetailScreen(
                 .padding(innerPadding)
                 .verticalScroll(rememberScrollState()),
         ) {
+            Text(
+                text = g.title,
+                style = MaterialTheme.typography.headlineSmall,
+                softWrap = true,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+            )
+
             if (g.coverImageId != null) {
-                Surface(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .aspectRatio(3f / 4f)
-                        .clickable(onClick = onOpenGallery),
-                    color = MaterialTheme.colorScheme.surfaceVariant,
+                Box(
+                    modifier = Modifier.fillMaxWidth(),
+                    contentAlignment = Alignment.Center,
                 ) {
-                    AsyncImage(
-                        model = GameImageUrl.cover(g.coverImageId),
-                        contentDescription = g.title,
-                        contentScale = ContentScale.Fit,
-                        modifier = Modifier.fillMaxSize(),
-                    )
+                    Surface(
+                        modifier = Modifier
+                            .fillMaxWidth(0.5f)
+                            .aspectRatio(3f / 4f)
+                            .clickable(onClick = onOpenGallery),
+                        color = MaterialTheme.colorScheme.surfaceVariant,
+                    ) {
+                        AsyncImage(
+                            model = GameImageUrl.cover(g.coverImageId),
+                            contentDescription = g.title,
+                            contentScale = ContentScale.Fit,
+                            modifier = Modifier.fillMaxSize(),
+                        )
+                    }
                 }
             }
 

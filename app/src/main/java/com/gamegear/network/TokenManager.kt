@@ -10,7 +10,7 @@ import okhttp3.FormBody
 import okhttp3.OkHttpClient
 import okhttp3.Request
 
-private val json = Json { ignoreUnknownKeys = true }
+private val tokenJson = Json { ignoreUnknownKeys = true }
 
 @Serializable
 private data class TokenResponse(
@@ -24,9 +24,7 @@ class TokenManager {
     private var expiresAt: Long = 0L
 
     suspend fun getToken(): String? {
-        if (BuildConfig.IGDB_CLIENT_ID.isBlank() || BuildConfig.IGDB_CLIENT_SECRET.isBlank()) {
-            return null
-        }
+        if (BuildConfig.IGDB_CLIENT_ID.isBlank() || BuildConfig.IGDB_CLIENT_SECRET.isBlank()) return null
         val now = System.currentTimeMillis()
         if (cachedToken != null && now < expiresAt - 60_000) return cachedToken
 
@@ -43,7 +41,7 @@ class TokenManager {
                     .build()
                 val response = client.newCall(request).execute()
                 val bodyStr = response.body?.string() ?: return@withContext null
-                val tokenResponse = json.decodeFromString<TokenResponse>(bodyStr)
+                val tokenResponse = tokenJson.decodeFromString<TokenResponse>(bodyStr)
                 cachedToken = tokenResponse.accessToken
                 expiresAt = now + tokenResponse.expiresIn * 1000
                 cachedToken

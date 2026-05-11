@@ -1,6 +1,9 @@
 package com.gamegear.ui.imagepicker
 
+import android.content.Intent
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -22,6 +25,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -34,6 +38,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.gamegear.data.GameRepository
@@ -48,8 +53,24 @@ fun ImagePickerScreen(
 ) {
     BackHandler(onBack = onDismiss)
 
+    val context = LocalContext.current
     var imageIds by remember { mutableStateOf<List<String>?>(null) }
     val scope = rememberCoroutineScope()
+
+    val filePickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument(),
+    ) { uri ->
+        if (uri != null) {
+            context.contentResolver.takePersistableUriPermission(
+                uri, Intent.FLAG_GRANT_READ_URI_PERMISSION
+            )
+            scope.launch {
+                val uriString = uri.toString()
+                repository.setCoverImage(gameId, uriString)
+                onSelect(uriString)
+            }
+        }
+    }
 
     LaunchedEffect(gameId) {
         imageIds = repository.fetchCandidateImages(gameId)
@@ -64,7 +85,6 @@ fun ImagePickerScreen(
 
         when {
             ids == null -> {
-                // Loading
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
@@ -74,8 +94,15 @@ fun ImagePickerScreen(
                 ) {
                     CircularProgressIndicator(color = Color.White)
                     Spacer(Modifier.height(16.dp))
-                    Text("Searching IGDB…", color = Color.White, style = MaterialTheme.typography.bodyMedium)
+                    Text("Searching...", color = Color.White, style = MaterialTheme.typography.bodyMedium)
                 }
+                SelectImageButton(
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .systemBarsPadding()
+                        .padding(bottom = 24.dp),
+                    onClick = { filePickerLauncher.launch(arrayOf("image/*")) },
+                )
                 CloseButton(onDismiss)
             }
 
@@ -87,8 +114,15 @@ fun ImagePickerScreen(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.Center,
                 ) {
-                    Text("No images found on IGDB", color = Color.White, style = MaterialTheme.typography.bodyMedium)
+                    Text("No images found", color = Color.White, style = MaterialTheme.typography.bodyMedium)
                 }
+                SelectImageButton(
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .systemBarsPadding()
+                        .padding(bottom = 24.dp),
+                    onClick = { filePickerLauncher.launch(arrayOf("image/*")) },
+                )
                 CloseButton(onDismiss)
             }
 
@@ -107,7 +141,6 @@ fun ImagePickerScreen(
                     )
                 }
 
-                // Bottom bar: page indicator + Set as Cover button
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -123,7 +156,9 @@ fun ImagePickerScreen(
                         color = Color.White,
                         style = MaterialTheme.typography.labelLarge,
                     )
-                    Spacer(Modifier.width(16.dp))
+                    Spacer(Modifier.width(8.dp))
+                    SelectImageButton(onClick = { filePickerLauncher.launch(arrayOf("image/*")) })
+                    Spacer(Modifier.width(8.dp))
                     Button(
                         onClick = {
                             val selected = ids[pagerState.currentPage]
@@ -140,6 +175,13 @@ fun ImagePickerScreen(
                 CloseButton(onDismiss)
             }
         }
+    }
+}
+
+@Composable
+private fun SelectImageButton(onClick: () -> Unit, modifier: Modifier = Modifier) {
+    OutlinedButton(onClick = onClick, modifier = modifier) {
+        Text("Select Image", color = Color.White)
     }
 }
 

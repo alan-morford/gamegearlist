@@ -38,7 +38,6 @@ import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.gamegear.data.GameRepository
 import com.gamegear.network.GameImageUrl
-import com.gamegear.network.IgdbImageUrl
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonPrimitive
@@ -60,7 +59,7 @@ fun ImageGalleryScreen(
         g.screenshotIds?.let { json ->
             try {
                 val ids = Json.parseToJsonElement(json).jsonArray
-                ids.forEach { add(IgdbImageUrl.screenshot(it.jsonPrimitive.content)) }
+                ids.forEach { add(it.jsonPrimitive.content) }
             } catch (_: Exception) { /* malformed — skip */ }
         }
     }

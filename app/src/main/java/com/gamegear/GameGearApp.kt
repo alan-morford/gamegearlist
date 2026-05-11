@@ -27,6 +27,7 @@ class GameGearApp : Application() {
             assets = assets,
             prefs = getSharedPreferences("gamegear_prefs", MODE_PRIVATE),
             scope = applicationScope,
+            saveDir = getExternalFilesDir(null) ?: filesDir,
         )
     }
 }
