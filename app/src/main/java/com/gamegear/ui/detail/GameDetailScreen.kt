@@ -17,6 +17,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -27,6 +29,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -39,7 +42,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
@@ -68,11 +70,65 @@ fun GameDetailScreen(
         game?.let { notesText = it.notes.orEmpty() }
     }
 
+    var showEditTitleDialog by remember { mutableStateOf(false) }
+    var editTitleText by remember { mutableStateOf("") }
+
+    if (showEditTitleDialog) {
+        AlertDialog(
+            onDismissRequest = { showEditTitleDialog = false },
+            title = { Text("Edit Title") },
+            text = {
+                OutlinedTextField(
+                    value = editTitleText,
+                    onValueChange = { editTitleText = it },
+                    singleLine = true,
+                    label = { Text("Title") },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        vm.updateTitle(editTitleText.trim())
+                        showEditTitleDialog = false
+                    },
+                    enabled = editTitleText.isNotBlank(),
+                ) { Text("Save") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showEditTitleDialog = false }) { Text("Cancel") }
+            },
+        )
+    }
+
     Scaffold(
         modifier = modifier,
         topBar = {
             TopAppBar(
-                title = { Text(game?.title ?: "", maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                title = {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            text = game?.title ?: "",
+                            style = MaterialTheme.typography.titleLarge,
+                            modifier = Modifier.weight(1f),
+                        )
+                        IconButton(
+                            onClick = {
+                                editTitleText = game?.title ?: ""
+                                showEditTitleDialog = true
+                            },
+                        ) {
+                            Icon(
+                                Icons.Default.Edit,
+                                contentDescription = "Edit title",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                },
                 navigationIcon = {
                     if (showBackButton) {
                         IconButton(onClick = onBack) {

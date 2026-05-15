@@ -54,6 +54,10 @@ class GameListViewModel(private val repository: GameRepository) : ViewModel() {
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
+    val appTitle = repository.appTitle
+
+    fun setAppTitle(title: String) = repository.setAppTitle(title)
+
     fun cycleRegionFilter() {
         regionFilter.value = when (regionFilter.value) {
             RegionFilter.ALL    -> RegionFilter.JAPAN

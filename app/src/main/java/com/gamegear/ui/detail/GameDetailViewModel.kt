@@ -70,6 +70,12 @@ class GameDetailViewModel(
         _pendingNotes.value = text
     }
 
+    fun updateTitle(title: String) {
+        viewModelScope.launch {
+            repository.updateGameTitle(gameId, title)
+        }
+    }
+
     private fun saveField(transform: (GameEntity) -> GameEntity) {
         viewModelScope.launch {
             val current = game.filterNotNull().first()

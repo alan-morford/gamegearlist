@@ -20,6 +20,10 @@ class SettingsViewModel(private val repository: GameRepository) : ViewModel() {
     private val _scanState = MutableStateFlow<ScanState>(ScanState.Idle)
     val scanState: StateFlow<ScanState> = _scanState
 
+    val appTitle = repository.appTitle
+
+    fun setAppTitle(title: String) = repository.setAppTitle(title)
+
     fun resetAll() {
         viewModelScope.launch { repository.resetOwnershipAndNotes() }
     }

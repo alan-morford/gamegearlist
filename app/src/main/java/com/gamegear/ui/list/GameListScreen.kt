@@ -76,6 +76,7 @@ fun GameListScreen(
     val query by vm.searchQuery.collectAsState()
     val filter by vm.filterMode.collectAsState()
     val regionFilter by vm.regionFilter.collectAsState()
+    val appTitle by vm.appTitle.collectAsState()
     val scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior(topAppBarState)
     var shouldScrollToTop by remember { mutableStateOf(false) }
 
@@ -91,7 +92,7 @@ fun GameListScreen(
         topBar = {
             Column {
                 TopAppBar(
-                    title = { Text("Alan's Game Gear List") },
+                    title = { Text(appTitle) },
                     actions = {
                         IconButton(onClick = onOpenSettings) {
                             Icon(

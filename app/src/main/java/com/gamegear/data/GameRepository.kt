@@ -12,6 +12,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
@@ -43,6 +45,16 @@ class GameRepository(
 ) {
     private val saveFile get() = File(saveDir, "gamegear_save.json")
 
+    private val _appTitle = MutableStateFlow(
+        prefs.getString("app_title", "Alan's Game Gear List") ?: "Alan's Game Gear List"
+    )
+    val appTitle: StateFlow<String> = _appTitle
+
+    fun setAppTitle(title: String) {
+        _appTitle.value = title
+        prefs.edit().putString("app_title", title).apply()
+    }
+
     fun getAllGames(): Flow<List<GameEntity>> = dao.getAllGames()
     fun searchGames(query: String): Flow<List<GameEntity>> = dao.searchGames(query)
     fun getGame(id: Int): Flow<GameEntity?> = dao.getGame(id)
@@ -50,6 +62,10 @@ class GameRepository(
     suspend fun updateGame(game: GameEntity) {
         dao.update(game)
         triggerAutoSave()
+    }
+
+    suspend fun updateGameTitle(gameId: Int, title: String) {
+        dao.updateTitle(gameId, title)
     }
 
     suspend fun setCoverImage(gameId: Int, imageUrl: String) =

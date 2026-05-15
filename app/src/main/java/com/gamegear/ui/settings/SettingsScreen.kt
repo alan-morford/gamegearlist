@@ -23,6 +23,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -56,6 +57,7 @@ fun SettingsScreen(
 
     var showResetDialog by remember { mutableStateOf(false) }
     var pendingSaveContent by remember { mutableStateOf<String?>(null) }
+    var titleText by remember { mutableStateOf(vm.appTitle.value) }
 
     // File picker — open an existing save to load
     val openFileLauncher = rememberLauncherForActivityResult(
@@ -119,6 +121,26 @@ fun SettingsScreen(
                 .padding(horizontal = 24.dp, vertical = 16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
+
+            // ── List Title section ────────────────────────────────────────
+            Text(
+                text = "List Title",
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.primary,
+            )
+
+            OutlinedTextField(
+                value = titleText,
+                onValueChange = {
+                    titleText = it
+                    vm.setAppTitle(it)
+                },
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text("App title") },
+                singleLine = true,
+            )
+
+            HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
 
             // ── Data section ──────────────────────────────────────────────
             Text(
