@@ -38,8 +38,12 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.TopAppBarState
 import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -73,6 +77,14 @@ fun GameListScreen(
     val filter by vm.filterMode.collectAsState()
     val regionFilter by vm.regionFilter.collectAsState()
     val scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior(topAppBarState)
+    var shouldScrollToTop by remember { mutableStateOf(false) }
+
+    LaunchedEffect(games) {
+        if (shouldScrollToTop) {
+            shouldScrollToTop = false
+            scrollState.scrollToItem(0)
+        }
+    }
 
     Scaffold(
         modifier = modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
@@ -109,9 +121,15 @@ fun GameListScreen(
                 )
                 FilterRow(
                     selected = filter,
-                    onSelect = { vm.filterMode.value = it },
+                    onSelect = {
+                        if (it == GameFilter.ALL) shouldScrollToTop = true
+                        vm.filterMode.value = it
+                    },
                     regionFilter = regionFilter,
-                    onRegionCycle = { vm.cycleRegionFilter() },
+                    onRegionCycle = {
+                        vm.cycleRegionFilter()
+                        if (vm.regionFilter.value == RegionFilter.ALL) shouldScrollToTop = true
+                    },
                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
                 )
             }
