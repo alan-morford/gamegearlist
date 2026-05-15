@@ -1,6 +1,5 @@
 package com.gamegear.ui.imagepicker
 
-import android.content.Intent
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -61,13 +60,9 @@ fun ImagePickerScreen(
         contract = ActivityResultContracts.OpenDocument(),
     ) { uri ->
         if (uri != null) {
-            context.contentResolver.takePersistableUriPermission(
-                uri, Intent.FLAG_GRANT_READ_URI_PERMISSION
-            )
             scope.launch {
-                val uriString = uri.toString()
-                repository.setCoverImage(gameId, uriString)
-                onSelect(uriString)
+                val localUri = repository.copyAndSetCoverImage(gameId, context.contentResolver, uri)
+                onSelect(localUri)
             }
         }
     }

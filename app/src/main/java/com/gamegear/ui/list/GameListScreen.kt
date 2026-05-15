@@ -35,6 +35,8 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.TopAppBarState
+import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -63,12 +65,14 @@ fun GameListScreen(
     onFindImages: (Int) -> Unit,
     modifier: Modifier = Modifier,
     scrollState: LazyListState = rememberLazyListState(),
+    topAppBarState: TopAppBarState = rememberTopAppBarState(),
 ) {
     val vm: GameListViewModel = viewModel(factory = GameListViewModel.Factory(repository))
     val games by vm.games.collectAsState()
     val query by vm.searchQuery.collectAsState()
     val filter by vm.filterMode.collectAsState()
-    val scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior()
+    val regionFilter by vm.regionFilter.collectAsState()
+    val scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior(topAppBarState)
 
     Scaffold(
         modifier = modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
@@ -101,12 +105,14 @@ fun GameListScreen(
                     onQueryChange = { vm.searchQuery.value = it },
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 6.dp),
+                        .padding(horizontal = 12.dp, vertical = 4.dp),
                 )
                 FilterRow(
                     selected = filter,
                     onSelect = { vm.filterMode.value = it },
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp),
+                    regionFilter = regionFilter,
+                    onRegionCycle = { vm.cycleRegionFilter() },
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
                 )
             }
         },
@@ -119,7 +125,7 @@ fun GameListScreen(
                 contentAlignment = Alignment.Center,
             ) {
                 Text(
-                    text = if (query.isBlank() && filter == GameFilter.ALL) "Loading…" else "No results",
+                    text = if (query.isBlank() && filter == GameFilter.ALL && regionFilter == RegionFilter.ALL) "Loading…" else "No results",
                     style = MaterialTheme.typography.bodyLarge,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -149,6 +155,8 @@ fun GameListScreen(
 private fun FilterRow(
     selected: GameFilter,
     onSelect: (GameFilter) -> Unit,
+    regionFilter: RegionFilter,
+    onRegionCycle: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Row(
@@ -171,6 +179,21 @@ private fun FilterRow(
                 },
             )
         }
+        FilterChip(
+            selected = regionFilter != RegionFilter.ALL,
+            onClick = onRegionCycle,
+            label = {
+                Text(
+                    text = when (regionFilter) {
+                        RegionFilter.ALL    -> "Exclusives"
+                        RegionFilter.JAPAN  -> "JP Only"
+                        RegionFilter.USA    -> "US Only"
+                        RegionFilter.EUROPE -> "EU Only"
+                    },
+                    style = MaterialTheme.typography.labelMedium,
+                )
+            },
+        )
     }
 }
 

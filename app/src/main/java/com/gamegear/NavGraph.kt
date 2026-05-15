@@ -5,6 +5,8 @@ import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -31,12 +33,14 @@ import com.gamegear.ui.list.GameListScreen
 import com.gamegear.ui.settings.SettingsScreen
 import kotlinx.coroutines.delay
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun NavGraph(repository: GameRepository) {
     val screenWidthDp = LocalConfiguration.current.screenWidthDp
     val isWideLayout = screenWidthDp >= 600
 
     val listScrollState = rememberLazyListState()
+    val listTopAppBarState = rememberTopAppBarState()
     var selectedGameId by rememberSaveable { mutableStateOf<Int?>(null) }
     var galleryGameId by rememberSaveable { mutableStateOf<Int?>(null) }
     var imagePickerGameId by rememberSaveable { mutableStateOf<Int?>(null) }
@@ -94,6 +98,7 @@ fun NavGraph(repository: GameRepository) {
                 onOpenSettings = { settingsOpen = true },
                 onFindImages = { imagePickerGameId = it },
                 scrollState = listScrollState,
+                topAppBarState = listTopAppBarState,
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxHeight(),
@@ -160,6 +165,7 @@ fun NavGraph(repository: GameRepository) {
                 onOpenSettings = { settingsOpen = true },
                 onFindImages = { imagePickerGameId = it },
                 scrollState = listScrollState,
+                topAppBarState = listTopAppBarState,
             )
         }
     }

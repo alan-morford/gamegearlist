@@ -17,7 +17,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.ImageSearch
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -40,6 +39,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
@@ -64,27 +64,20 @@ fun GameDetailScreen(
     val game by vm.game.collectAsState()
 
     var notesText by remember { mutableStateOf("") }
-    LaunchedEffect(game?.notes) {
-        if (notesText.isEmpty() && game?.notes != null) {
-            notesText = game!!.notes!!
-        }
+    LaunchedEffect(game?.id) {
+        game?.let { notesText = it.notes.orEmpty() }
     }
 
     Scaffold(
         modifier = modifier,
         topBar = {
             TopAppBar(
-                title = { },
+                title = { Text(game?.title ?: "", maxLines = 1, overflow = TextOverflow.Ellipsis) },
                 navigationIcon = {
                     if (showBackButton) {
                         IconButton(onClick = onBack) {
                             Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                         }
-                    }
-                },
-                actions = {
-                    IconButton(onClick = onFindImages) {
-                        Icon(Icons.Default.ImageSearch, contentDescription = "Find Images")
                     }
                 },
             )
@@ -109,15 +102,6 @@ fun GameDetailScreen(
                 .padding(innerPadding)
                 .verticalScroll(rememberScrollState()),
         ) {
-            Text(
-                text = g.title,
-                style = MaterialTheme.typography.headlineSmall,
-                softWrap = true,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
-            )
-
             if (g.coverImageId != null) {
                 Box(
                     modifier = Modifier.fillMaxWidth(),
@@ -131,7 +115,7 @@ fun GameDetailScreen(
                         color = MaterialTheme.colorScheme.surfaceVariant,
                     ) {
                         AsyncImage(
-                            model = GameImageUrl.cover(g.coverImageId),
+                            model = GameImageUrl.thumbnail(g.coverImageId),
                             contentDescription = g.title,
                             contentScale = ContentScale.Fit,
                             modifier = Modifier.fillMaxSize(),

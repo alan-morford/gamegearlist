@@ -16,7 +16,7 @@ interface GameDao {
     @Query("SELECT * FROM games WHERE id = :id")
     fun getGame(id: Int): Flow<GameEntity?>
 
-    @Query("SELECT * FROM games WHERE title LIKE '%' || :query || '%' ORDER BY title ASC")
+    @Query("SELECT * FROM games WHERE title LIKE '%' || :query || '%' OR notes LIKE '%' || :query || '%' ORDER BY title ASC")
     fun searchGames(query: String): Flow<List<GameEntity>>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)

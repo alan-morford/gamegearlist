@@ -22,6 +22,9 @@ import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import android.content.ContentResolver
+import android.net.Uri
+import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody.Companion.toRequestBody
 import java.io.File
@@ -51,6 +54,29 @@ class GameRepository(
 
     suspend fun setCoverImage(gameId: Int, imageUrl: String) =
         dao.updateCoverImageId(gameId, imageUrl)
+
+    suspend fun migrateLegacyCoverImages(contentResolver: ContentResolver) {
+        dao.getAllGamesList()
+            .filter { it.coverImageId?.startsWith("content://") == true }
+            .forEach { game ->
+                try {
+                    copyAndSetCoverImage(game.id, contentResolver, Uri.parse(game.coverImageId!!))
+                } catch (_: Exception) { /* URI no longer valid — leave as-is */ }
+            }
+    }
+
+    suspend fun copyAndSetCoverImage(gameId: Int, contentResolver: ContentResolver, uri: Uri): String {
+        val coversDir = File(saveDir, "covers").also { it.mkdirs() }
+        val destFile = File(coversDir, "cover_$gameId.jpg")
+        withContext(Dispatchers.IO) {
+            contentResolver.openInputStream(uri)?.use { input ->
+                destFile.outputStream().use { output -> input.copyTo(output) }
+            }
+        }
+        val fileUri = Uri.fromFile(destFile).toString()
+        dao.updateCoverImageId(gameId, fileUri)
+        return fileUri
+    }
 
     // ── Image picking ────────────────────────────────────────────────────────
 
