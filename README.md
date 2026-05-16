@@ -1,4 +1,4 @@
-A personal collection tracker for Android for the Sega Game Gear library. Browse the full game catalog, mark which titles you own by region (Japan, USA, Europe), add notes, and manage cover art.
+A personal collection tracker for Android for the Sega Game Gear library. Browse the full game catalog, mark which titles you own by region (Japan, USA, Europe), add notes, and manage cover art. I built this specifically for my Z Fold 6.
 
 ## Features
 
