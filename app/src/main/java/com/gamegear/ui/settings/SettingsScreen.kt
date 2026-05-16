@@ -5,7 +5,10 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.FileProvider
+import coil.Coil
 import java.io.File
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -61,6 +64,7 @@ fun SettingsScreen(
     var showResetDialog by remember { mutableStateOf(false) }
     var pendingSaveContent by remember { mutableStateOf<String?>(null) }
     var titleText by remember { mutableStateOf(vm.appTitle.value) }
+    var cacheClearMessage by remember { mutableStateOf<String?>(null) }
 
     // File picker — open an existing save to load
     val openFileLauncher = rememberLauncherForActivityResult(
@@ -238,7 +242,7 @@ fun SettingsScreen(
                 }
                 Text(
                     text = when (val s = scanState) {
-                        is SettingsViewModel.ScanState.Connecting -> "Connecting to IGDB…"
+                        is SettingsViewModel.ScanState.Connecting -> "Connecting…"
                         is SettingsViewModel.ScanState.Scanning ->
                             "Scanning ${s.current} / ${s.total}…"
                         else -> "Scan Missing Images"
@@ -249,6 +253,28 @@ fun SettingsScreen(
             if (scanState is SettingsViewModel.ScanState.Done) {
                 Text(
                     text = (scanState as SettingsViewModel.ScanState.Done).message,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+
+            OutlinedButton(
+                onClick = {
+                    scope.launch {
+                        withContext(Dispatchers.IO) {
+                            Coil.imageLoader(context).diskCache?.clear()
+                        }
+                        cacheClearMessage = "Image cache cleared"
+                    }
+                },
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text("Clear Image Cache")
+            }
+
+            cacheClearMessage?.let {
+                Text(
+                    text = it,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )

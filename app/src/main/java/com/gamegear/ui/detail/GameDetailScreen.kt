@@ -300,8 +300,7 @@ private fun RegionRow(label: String, state: Boolean?, onToggle: (Boolean) -> Uni
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .heightIn(min = 48.dp)
-            .padding(vertical = 4.dp),
+            .height(56.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Surface(

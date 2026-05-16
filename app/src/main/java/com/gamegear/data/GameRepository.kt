@@ -181,6 +181,7 @@ class GameRepository(
             val igdbByNorm = igdbResults.associateBy { it.name.normalize() }
             var found = 0
 
+            // IGDB pass
             allGames.forEachIndexed { idx, game ->
                 onProgress(idx + 1, allGames.size)
                 if (game.coverImageId != null) return@forEachIndexed
@@ -194,6 +195,28 @@ class GameRepository(
                 dao.updateCoverImageId(game.id, imageId)
                 found++
             }
+
+            // TGDB pass for games still missing images after IGDB
+            val stillMissing = dao.getAllGamesList().filter { it.coverImageId == null }
+            val combinedTotal = allGames.size + stillMissing.size
+            val apiKey = com.gamegear.BuildConfig.TGDB_API_KEY
+            stillMissing.forEachIndexed { idx, game ->
+                onProgress(allGames.size + idx + 1, combinedTotal)
+                try {
+                    val searchResponse = tgdbService.searchByName(apiKey = apiKey, name = game.title.stripRegionCodes())
+                    val tgdbGame = searchResponse.data?.games?.firstOrNull() ?: return@forEachIndexed
+                    val imagesResponse = tgdbService.getImages(apiKey = apiKey, gameId = tgdbGame.id, type = "boxart")
+                    val data = imagesResponse.data ?: return@forEachIndexed
+                    val baseUrl = data.baseUrl?.large ?: data.baseUrl?.original ?: return@forEachIndexed
+                    val imageList = data.images?.get(tgdbGame.id.toString()) ?: return@forEachIndexed
+                    val boxart = imageList.firstOrNull { it.type == "boxart" && it.side == "front" }
+                        ?: imageList.firstOrNull { it.type == "boxart" }
+                        ?: return@forEachIndexed
+                    dao.updateCoverImageId(game.id, baseUrl + boxart.filename)
+                    found++
+                } catch (_: Exception) { }
+            }
+
             found
         } catch (_: Exception) {
             0

@@ -47,6 +47,7 @@ fun NavGraph(repository: GameRepository) {
     var galleryGameId by rememberSaveable { mutableStateOf<Int?>(null) }
     var imagePickerGameId by rememberSaveable { mutableStateOf<Int?>(null) }
     var settingsOpen by rememberSaveable { mutableStateOf(false) }
+    var returnScrollToId by rememberSaveable { mutableStateOf<Int?>(null) }
 
     // In wide layout, scroll the list to keep the selected game visible when swiping
     LaunchedEffect(selectedGameId) {
@@ -164,7 +165,10 @@ fun NavGraph(repository: GameRepository) {
         }
     } else {
         if (selectedGameId != null) {
-            BackHandler { selectedGameId = null }
+            BackHandler {
+                returnScrollToId = selectedGameId
+                selectedGameId = null
+            }
             GameDetailScreen(
                 gameId = selectedGameId!!,
                 gameIds = selectedGameIds,
@@ -193,6 +197,8 @@ fun NavGraph(repository: GameRepository) {
                 onFindImages = { imagePickerGameId = it },
                 scrollState = listScrollState,
                 topAppBarState = listTopAppBarState,
+                scrollToGameId = returnScrollToId,
+                onScrollToGameHandled = { returnScrollToId = null },
             )
         }
     }

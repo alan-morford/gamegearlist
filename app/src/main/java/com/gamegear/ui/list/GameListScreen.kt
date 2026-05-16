@@ -55,6 +55,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.input.pointer.pointerInput
@@ -82,6 +83,8 @@ fun GameListScreen(
     modifier: Modifier = Modifier,
     scrollState: LazyListState = rememberLazyListState(),
     topAppBarState: TopAppBarState = rememberTopAppBarState(),
+    scrollToGameId: Int? = null,
+    onScrollToGameHandled: () -> Unit = {},
 ) {
     val vm: GameListViewModel = viewModel(factory = GameListViewModel.Factory(repository))
     val dbGames by vm.games.collectAsState()
@@ -111,6 +114,15 @@ fun GameListScreen(
         if (shouldScrollToTop) {
             shouldScrollToTop = false
             scrollState.scrollToItem(0)
+            return@LaunchedEffect
+        }
+        val returnId = scrollToGameId
+        if (returnId != null) {
+            val index = draggableGames.indexOfFirst { it.id == returnId }
+            if (index >= 0) {
+                scrollState.scrollToItem(index)
+            }
+            onScrollToGameHandled()
         }
     }
 
@@ -277,8 +289,8 @@ private fun FilterRow(
     modifier: Modifier = Modifier,
 ) {
     Row(
-        modifier = modifier,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        modifier = modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
     ) {
         GameFilter.entries.forEach { f ->
             FilterChip(
@@ -300,15 +312,23 @@ private fun FilterRow(
             selected = regionFilter != RegionFilter.ALL,
             onClick = onRegionCycle,
             label = {
-                Text(
-                    text = when (regionFilter) {
-                        RegionFilter.ALL    -> "Exclusives"
-                        RegionFilter.JAPAN  -> "JP Only"
-                        RegionFilter.USA    -> "US Only"
-                        RegionFilter.EUROPE -> "EU Only"
-                    },
-                    style = MaterialTheme.typography.labelMedium,
-                )
+                Box(contentAlignment = Alignment.Center) {
+                    // Invisible anchor sized to the widest label so the chip never resizes
+                    Text(
+                        text = "Exclusives",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = Color.Transparent,
+                    )
+                    Text(
+                        text = when (regionFilter) {
+                            RegionFilter.ALL    -> "Exclusives"
+                            RegionFilter.JAPAN  -> "JP Only"
+                            RegionFilter.USA    -> "US Only"
+                            RegionFilter.EUROPE -> "EU Only"
+                        },
+                        style = MaterialTheme.typography.labelMedium,
+                    )
+                }
             },
         )
     }
