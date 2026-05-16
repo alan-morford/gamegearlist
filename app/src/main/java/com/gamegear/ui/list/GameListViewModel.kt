@@ -8,6 +8,7 @@ import com.gamegear.data.GameRepository
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
@@ -65,6 +66,10 @@ class GameListViewModel(private val repository: GameRepository) : ViewModel() {
             RegionFilter.USA    -> RegionFilter.EUROPE
             RegionFilter.EUROPE -> RegionFilter.ALL
         }
+    }
+
+    fun persistReorder(ids: List<Int>) {
+        viewModelScope.launch { repository.updateSortOrders(ids) }
     }
 
     init {

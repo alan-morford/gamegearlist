@@ -16,6 +16,7 @@ import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.ImageSearch
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.runtime.Composable
@@ -45,6 +46,7 @@ fun ImageGalleryScreen(
     gameId: Int,
     repository: GameRepository,
     onDismiss: () -> Unit,
+    onFindImages: () -> Unit,
 ) {
     BackHandler(onBack = onDismiss)
 
@@ -108,7 +110,18 @@ fun ImageGalleryScreen(
                         tint = Color.White,
                     )
                 }
-
+                IconButton(
+                    onClick = onFindImages,
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(8.dp),
+                ) {
+                    Icon(
+                        Icons.Default.ImageSearch,
+                        contentDescription = "Find images",
+                        tint = Color.White,
+                    )
+                }
             }
         }
     }

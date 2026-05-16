@@ -1,8 +1,11 @@
 package com.gamegear.ui.settings
 
+import android.content.Intent
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.FileProvider
+import java.io.File
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -160,6 +163,33 @@ fun SettingsScreen(
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 Text("Save Now")
+            }
+
+            // Share save as a file via the system share sheet
+            OutlinedButton(
+                onClick = {
+                    scope.launch {
+                        val content = vm.buildSaveContent()
+                        val timestamp = java.time.LocalDateTime.now()
+                            .format(java.time.format.DateTimeFormatter.ofPattern("ddMMyyyy_HH:mm"))
+                        val file = File(context.cacheDir, "gamegear_backup_${timestamp}.json")
+                        file.writeText(content)
+                        val uri = FileProvider.getUriForFile(
+                            context,
+                            "com.gamegear.fileprovider",
+                            file,
+                        )
+                        val intent = Intent(Intent.ACTION_SEND).apply {
+                            type = "application/json"
+                            putExtra(Intent.EXTRA_STREAM, uri)
+                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                        }
+                        context.startActivity(Intent.createChooser(intent, "Share Backup"))
+                    }
+                },
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text("Share Backup")
             }
 
             // Load from a previously saved file

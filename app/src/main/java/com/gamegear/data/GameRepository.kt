@@ -312,6 +312,10 @@ class GameRepository(
     }
 
     fun getSaveFilePath(): String = saveFile.absolutePath
+
+    suspend fun updateSortOrders(ids: List<Int>) {
+        dao.updateSortOrders(ids)
+    }
 }
 
 private fun String.stripRegionCodes(): String =

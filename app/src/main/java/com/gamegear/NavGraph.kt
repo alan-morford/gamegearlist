@@ -18,6 +18,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -42,9 +43,21 @@ fun NavGraph(repository: GameRepository) {
     val listScrollState = rememberLazyListState()
     val listTopAppBarState = rememberTopAppBarState()
     var selectedGameId by rememberSaveable { mutableStateOf<Int?>(null) }
+    var selectedGameIds by remember { mutableStateOf<List<Int>>(emptyList()) }
     var galleryGameId by rememberSaveable { mutableStateOf<Int?>(null) }
     var imagePickerGameId by rememberSaveable { mutableStateOf<Int?>(null) }
     var settingsOpen by rememberSaveable { mutableStateOf(false) }
+
+    // In wide layout, scroll the list to keep the selected game visible when swiping
+    LaunchedEffect(selectedGameId) {
+        if (!isWideLayout) return@LaunchedEffect
+        val id = selectedGameId ?: return@LaunchedEffect
+        val index = selectedGameIds.indexOf(id)
+        if (index < 0) return@LaunchedEffect
+        if (listScrollState.layoutInfo.visibleItemsInfo.none { it.index == index }) {
+            listScrollState.animateScrollToItem(index)
+        }
+    }
 
     // Full-screen overlays shown on top of whatever layout is active
     if (settingsOpen) {
@@ -68,6 +81,10 @@ fun NavGraph(repository: GameRepository) {
             gameId = galleryGameId!!,
             repository = repository,
             onDismiss = { galleryGameId = null },
+            onFindImages = {
+                imagePickerGameId = galleryGameId
+                galleryGameId = null
+            },
         )
         return
     }
@@ -94,7 +111,10 @@ fun NavGraph(repository: GameRepository) {
         Row(modifier = Modifier.fillMaxSize()) {
             GameListScreen(
                 repository = repository,
-                onGameClick = { selectedGameId = it },
+                onGameClick = { id, orderedIds ->
+                    selectedGameId = id
+                    selectedGameIds = orderedIds
+                },
                 onOpenSettings = { settingsOpen = true },
                 onFindImages = { imagePickerGameId = it },
                 scrollState = listScrollState,
@@ -120,10 +140,12 @@ fun NavGraph(repository: GameRepository) {
                 if (gameId != null) {
                     GameDetailScreen(
                         gameId = gameId,
+                        gameIds = selectedGameIds,
                         repository = repository,
                         onBack = { selectedGameId = null },
-                        onOpenGallery = { galleryGameId = gameId },
-                        onFindImages = { imagePickerGameId = gameId },
+                        onOpenGallery = { galleryGameId = selectedGameId },
+                        onFindImages = { imagePickerGameId = selectedGameId },
+                        onGameChange = { selectedGameId = it },
                         showBackButton = false,
                     )
                 } else {
@@ -145,10 +167,12 @@ fun NavGraph(repository: GameRepository) {
             BackHandler { selectedGameId = null }
             GameDetailScreen(
                 gameId = selectedGameId!!,
+                gameIds = selectedGameIds,
                 repository = repository,
                 onBack = { selectedGameId = null },
                 onOpenGallery = { galleryGameId = selectedGameId },
                 onFindImages = { imagePickerGameId = selectedGameId },
+                onGameChange = { selectedGameId = it },
             )
         } else {
             BackHandler {
@@ -161,7 +185,10 @@ fun NavGraph(repository: GameRepository) {
             }
             GameListScreen(
                 repository = repository,
-                onGameClick = { selectedGameId = it },
+                onGameClick = { id, orderedIds ->
+                    selectedGameId = id
+                    selectedGameIds = orderedIds
+                },
                 onOpenSettings = { settingsOpen = true },
                 onFindImages = { imagePickerGameId = it },
                 scrollState = listScrollState,

@@ -4,19 +4,20 @@ import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
+import androidx.room.Transaction
 import androidx.room.Update
 import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface GameDao {
 
-    @Query("SELECT * FROM games ORDER BY title ASC")
+    @Query("SELECT * FROM games ORDER BY sortOrder ASC, title ASC")
     fun getAllGames(): Flow<List<GameEntity>>
 
     @Query("SELECT * FROM games WHERE id = :id")
     fun getGame(id: Int): Flow<GameEntity?>
 
-    @Query("SELECT * FROM games WHERE title LIKE '%' || :query || '%' OR notes LIKE '%' || :query || '%' ORDER BY title ASC")
+    @Query("SELECT * FROM games WHERE title LIKE '%' || :query || '%' OR notes LIKE '%' || :query || '%' ORDER BY sortOrder ASC, title ASC")
     fun searchGames(query: String): Flow<List<GameEntity>>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
@@ -28,10 +29,10 @@ interface GameDao {
     @Query("SELECT COUNT(*) FROM games")
     suspend fun count(): Int
 
-    @Query("SELECT * FROM games ORDER BY title ASC")
+    @Query("SELECT * FROM games ORDER BY sortOrder ASC, title ASC")
     suspend fun getAllGamesList(): List<GameEntity>
 
-    @Query("SELECT * FROM games WHERE coverImageId IS NULL ORDER BY title ASC")
+    @Query("SELECT * FROM games WHERE coverImageId IS NULL ORDER BY sortOrder ASC, title ASC")
     suspend fun getGamesWithoutImages(): List<GameEntity>
 
     @Query("""
@@ -52,4 +53,12 @@ interface GameDao {
 
     @Query("UPDATE games SET title = :title WHERE id = :id")
     suspend fun updateTitle(id: Int, title: String)
+
+    @Query("UPDATE games SET sortOrder = :sortOrder WHERE id = :id")
+    suspend fun updateSortOrder(id: Int, sortOrder: Int)
+
+    @Transaction
+    suspend fun updateSortOrders(ids: List<Int>) {
+        ids.forEachIndexed { index, id -> updateSortOrder(id, index) }
+    }
 }

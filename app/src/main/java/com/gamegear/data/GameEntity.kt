@@ -17,4 +17,5 @@ data class GameEntity(
     val coverImageId: String? = null,
     /** JSON array string of IGDB screenshot image IDs */
     val screenshotIds: String? = null,
+    val sortOrder: Int = 0,
 )
