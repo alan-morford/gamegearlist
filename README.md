@@ -27,15 +27,15 @@ A personal collection tracker for Android for the Sega Game Gear library. Browse
 - Tap a game's thumbnail in the list to search for images manually
 - Image gallery viewer for a game's available art; image search button in the gallery to find more
 - Bulk "Scan Missing Images" in Settings — queries IGDB first (bulk), then falls back to TGDB (per-game) for any still missing
-- "Clear Image Cache" in Settings — wipes Coil's disk cache so all images are re-downloaded fresh on next display
-- Disk cache for images (Coil)
+- All scanned images are downloaded to local `file://` storage immediately — no internet connection needed to view them after scanning
+- On app launch, any images previously stored as remote URLs are automatically migrated to local files in the background
 - Local file picker to set a custom cover image from your device
+- "Delete All Images" in Settings — removes all cover images from disk and the database (with confirmation dialog); images can be restored with Scan Missing Images
 
 **Data / Settings**
 - Auto-save on every ownership or notes change (JSON file in app storage)
-- Manual "Save Now" — exports current state to a user-chosen location via Android's file picker
-- "Share Backup" — shares a timestamped JSON backup (`gamegear_backup_DDMMYYYY_HH:MM.json`) via Android's share sheet
-- "Load Save File" — restores ownership and notes from a previously exported file
+- "Backup" — choose to export database only (JSON) or database + all cover images (ZIP); shared via Android's share sheet
+- "Load Backup" — restores from a previously exported `.json` or `.zip` backup; ZIP restore extracts cover images and updates all database references automatically
 - "Reset All" — clears all ownership toggles and notes (with confirmation dialog)
 
 **Infrastructure**

@@ -51,6 +51,9 @@ interface GameDao {
     @Query("UPDATE games SET coverImageId = :imageId WHERE id = :id")
     suspend fun updateCoverImageId(id: Int, imageId: String)
 
+    @Query("UPDATE games SET coverImageId = NULL")
+    suspend fun clearAllCoverImageIds()
+
     @Query("UPDATE games SET title = :title WHERE id = :id")
     suspend fun updateTitle(id: Int, title: String)
 

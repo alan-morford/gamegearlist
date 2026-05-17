@@ -28,10 +28,13 @@ import android.content.ContentResolver
 import android.net.Uri
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.OkHttpClient
+import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import java.io.File
 
 private val json = Json { ignoreUnknownKeys = true; coerceInputValues = true }
+private val downloadClient = OkHttpClient()
 
 class GameRepository(
     private val dao: GameDao,
@@ -92,6 +95,41 @@ class GameRepository(
         val fileUri = Uri.fromFile(destFile).toString()
         dao.updateCoverImageId(gameId, fileUri)
         return fileUri
+    }
+
+    suspend fun deleteAllImages() {
+        withContext(Dispatchers.IO) {
+            File(saveDir, "covers").deleteRecursively()
+        }
+        dao.clearAllCoverImageIds()
+    }
+
+    private suspend fun downloadImageToFile(gameId: Int, url: String): String? {
+        return try {
+            withContext(Dispatchers.IO) {
+                val coversDir = File(saveDir, "covers").also { it.mkdirs() }
+                val destFile = File(coversDir, "cover_$gameId.jpg")
+                val response = downloadClient.newCall(Request.Builder().url(url).build()).execute()
+                if (!response.isSuccessful) return@withContext null
+                response.body?.byteStream()?.use { input ->
+                    destFile.outputStream().use { output -> input.copyTo(output) }
+                } ?: return@withContext null
+                Uri.fromFile(destFile).toString()
+            }
+        } catch (_: Exception) { null }
+    }
+
+    suspend fun saveRemoteImagesLocally(onProgress: (current: Int, total: Int) -> Unit): Int {
+        val games = dao.getAllGamesList()
+            .filter { it.coverImageId?.startsWith("http") == true }
+        var saved = 0
+        games.forEachIndexed { idx, game ->
+            onProgress(idx + 1, games.size)
+            val localUri = downloadImageToFile(game.id, game.coverImageId!!) ?: return@forEachIndexed
+            dao.updateCoverImageId(game.id, localUri)
+            saved++
+        }
+        return saved
     }
 
     // ── Image picking ────────────────────────────────────────────────────────
@@ -192,8 +230,9 @@ class GameRepository(
                     }?.value ?: return@forEachIndexed
                 val imageId = match.cover?.imageId ?: match.artworks?.firstOrNull()?.imageId
                     ?: return@forEachIndexed
-                dao.updateCoverImageId(game.id, imageId)
-                found++
+                val localUri = downloadImageToFile(game.id, IgdbImageUrl.coverBig(imageId))
+                dao.updateCoverImageId(game.id, localUri ?: imageId)
+                if (localUri != null) found++
             }
 
             // TGDB pass for games still missing images after IGDB
@@ -212,8 +251,10 @@ class GameRepository(
                     val boxart = imageList.firstOrNull { it.type == "boxart" && it.side == "front" }
                         ?: imageList.firstOrNull { it.type == "boxart" }
                         ?: return@forEachIndexed
-                    dao.updateCoverImageId(game.id, baseUrl + boxart.filename)
-                    found++
+                    val tgdbUrl = baseUrl + boxart.filename
+                    val localUri = downloadImageToFile(game.id, tgdbUrl)
+                    dao.updateCoverImageId(game.id, localUri ?: tgdbUrl)
+                    if (localUri != null) found++
                 } catch (_: Exception) { }
             }
 
@@ -313,6 +354,51 @@ class GameRepository(
         return json.encodeToString(data)
     }
 
+    suspend fun loadFromZip(inputStream: java.io.InputStream) {
+        withContext(Dispatchers.IO) {
+            val coversDir = File(saveDir, "covers").also { it.mkdirs() }
+            var jsonContent: String? = null
+
+            java.util.zip.ZipInputStream(inputStream).use { zip ->
+                var entry = zip.nextEntry
+                while (entry != null) {
+                    when {
+                        entry.name == "gamegear_save.json" -> {
+                            jsonContent = zip.readBytes().toString(Charsets.UTF_8)
+                        }
+                        entry.name.startsWith("covers/") && !entry.isDirectory -> {
+                            val fileName = entry.name.substringAfterLast("/")
+                            File(coversDir, fileName).outputStream().use { out -> zip.copyTo(out) }
+                        }
+                    }
+                    zip.closeEntry()
+                    entry = zip.nextEntry
+                }
+            }
+
+            jsonContent?.let { content ->
+                val saveData = json.decodeFromString<SaveFile>(content)
+                val allGames = dao.getAllGamesList().associateBy { it.id }
+                saveData.games.forEach { entry ->
+                    val game = allGames[entry.id] ?: return@forEach
+                    dao.update(game.copy(
+                        japanOwned = entry.japanOwned,
+                        usaOwned = entry.usaOwned,
+                        europeOwned = entry.europeOwned,
+                        owned = entry.japanOwned == true || entry.usaOwned == true || entry.europeOwned == true,
+                        notes = entry.notes,
+                    ))
+                }
+            }
+
+            coversDir.listFiles()?.forEach { imageFile ->
+                val gameId = imageFile.nameWithoutExtension.removePrefix("cover_").toIntOrNull()
+                    ?: return@forEach
+                dao.updateCoverImageId(gameId, Uri.fromFile(imageFile).toString())
+            }
+        }
+    }
+
     suspend fun loadFromContent(content: String) {
         val saveData = json.decodeFromString<SaveFile>(content)
         val allGames = dao.getAllGamesList().associateBy { it.id }
@@ -335,6 +421,8 @@ class GameRepository(
     }
 
     fun getSaveFilePath(): String = saveFile.absolutePath
+
+    fun getCoversDir(): File = File(saveDir, "covers")
 
     suspend fun updateSortOrders(ids: List<Int>) {
         dao.updateSortOrders(ids)

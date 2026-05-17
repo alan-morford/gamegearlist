@@ -36,6 +36,14 @@ class SettingsViewModel(private val repository: GameRepository) : ViewModel() {
         }
     }
 
+    fun loadFromZip(inputStream: java.io.InputStream) {
+        viewModelScope.launch {
+            try {
+                repository.loadFromZip(inputStream)
+            } catch (_: Exception) { }
+        }
+    }
+
     suspend fun buildSaveContent(): String = repository.buildSaveContent()
 
     fun scanMissingImages() {
@@ -52,6 +60,12 @@ class SettingsViewModel(private val repository: GameRepository) : ViewModel() {
             )
         }
     }
+
+    fun deleteAllImages() {
+        viewModelScope.launch { repository.deleteAllImages() }
+    }
+
+    fun getCoversDir() = repository.getCoversDir()
 
     class Factory(private val repository: GameRepository) : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")

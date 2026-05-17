@@ -3,7 +3,6 @@ package com.gamegear
 import android.app.Application
 import coil.Coil
 import coil.ImageLoader
-import coil.disk.DiskCache
 import com.gamegear.data.GameDatabase
 import com.gamegear.data.GameRepository
 import com.gamegear.network.IgdbService
@@ -13,23 +12,42 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import okhttp3.Cache
+import okhttp3.OkHttpClient
 
 class GameGearApp : Application() {
+
+    val imageCache by lazy {
+        Cache(
+            directory = filesDir.resolve("img_http_cache"),
+            maxSize = 100L * 1024 * 1024,
+        )
+    }
 
     override fun onCreate() {
         super.onCreate()
         Coil.setImageLoader {
-            ImageLoader.Builder(this)
-                .diskCache {
-                    DiskCache.Builder()
-                        .directory(cacheDir.resolve("image_cache"))
-                        .maxSizePercent(0.02)
+            // Use OkHttp's HTTP cache with a network interceptor that overrides whatever
+            // Cache-Control the CDN returns, so images are always stored locally after
+            // first download and served from disk on every subsequent request.
+            val imageClient = OkHttpClient.Builder()
+                .cache(imageCache)
+                .addNetworkInterceptor { chain ->
+                    chain.proceed(chain.request()).newBuilder()
+                        .header("Cache-Control", "public, max-age=31536000, immutable")
+                        .removeHeader("Pragma")
                         .build()
                 }
+                .build()
+            ImageLoader.Builder(this)
+                .okHttpClient(imageClient)
                 .build()
         }
         applicationScope.launch {
             repository.migrateLegacyCoverImages(contentResolver)
+        }
+        applicationScope.launch {
+            repository.saveRemoteImagesLocally { _, _ -> }
         }
     }
 

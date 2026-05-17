@@ -5,7 +5,6 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.FileProvider
-import coil.Coil
 import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -62,29 +61,23 @@ fun SettingsScreen(
     val scope = rememberCoroutineScope()
 
     var showResetDialog by remember { mutableStateOf(false) }
-    var pendingSaveContent by remember { mutableStateOf<String?>(null) }
+    var showDeleteImagesDialog by remember { mutableStateOf(false) }
+    var showBackupOptionsDialog by remember { mutableStateOf(false) }
     var titleText by remember { mutableStateOf(vm.appTitle.value) }
-    var cacheClearMessage by remember { mutableStateOf<String?>(null) }
 
-    // File picker — open an existing save to load
+    // File picker — open an existing save to load (JSON or ZIP backup)
     val openFileLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument()
     ) { uri ->
         uri?.let {
-            val content = context.contentResolver.openInputStream(it)
-                ?.bufferedReader()?.readText() ?: return@let
-            vm.loadFromContent(content)
-        }
-    }
-
-    // File creator — write the current save to a user-chosen location
-    val createFileLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.CreateDocument("application/json")
-    ) { uri ->
-        uri?.let { dest ->
-            val content = pendingSaveContent ?: return@let
-            context.contentResolver.openOutputStream(dest)?.use { it.write(content.toByteArray()) }
-            pendingSaveContent = null
+            val mimeType = context.contentResolver.getType(it)
+            if (mimeType?.contains("zip") == true) {
+                context.contentResolver.openInputStream(it)?.let { stream -> vm.loadFromZip(stream) }
+            } else {
+                val content = context.contentResolver.openInputStream(it)
+                    ?.bufferedReader()?.readText() ?: return@let
+                vm.loadFromContent(content)
+            }
         }
     }
 
@@ -105,6 +98,88 @@ fun SettingsScreen(
             },
             dismissButton = {
                 TextButton(onClick = { showResetDialog = false }) { Text("Cancel") }
+            },
+        )
+    }
+
+    if (showDeleteImagesDialog) {
+        AlertDialog(
+            onDismissRequest = { showDeleteImagesDialog = false },
+            title = { Text("Delete All Images?") },
+            text = {
+                Text("This will remove all cover images from the app. You can restore them using Scan Missing Images.")
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        vm.deleteAllImages()
+                        showDeleteImagesDialog = false
+                    }
+                ) { Text("Delete", color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteImagesDialog = false }) { Text("Cancel") }
+            },
+        )
+    }
+
+    if (showBackupOptionsDialog) {
+        AlertDialog(
+            onDismissRequest = { showBackupOptionsDialog = false },
+            title = { Text("Share Backup") },
+            text = { Text("Include cover images in the backup?") },
+            confirmButton = {
+                TextButton(onClick = {
+                    showBackupOptionsDialog = false
+                    scope.launch {
+                        val content = vm.buildSaveContent()
+                        val timestamp = java.time.LocalDateTime.now()
+                            .format(java.time.format.DateTimeFormatter.ofPattern("ddMMyyyy_HHmm"))
+                        val zipFile = withContext(Dispatchers.IO) {
+                            val file = File(context.cacheDir, "gamegear_backup_${timestamp}.zip")
+                            java.util.zip.ZipOutputStream(file.outputStream().buffered()).use { zip ->
+                                zip.putNextEntry(java.util.zip.ZipEntry("gamegear_save.json"))
+                                zip.write(content.toByteArray())
+                                zip.closeEntry()
+                                val coversDir = vm.getCoversDir()
+                                if (coversDir.exists()) {
+                                    coversDir.listFiles()?.forEach { img ->
+                                        zip.putNextEntry(java.util.zip.ZipEntry("covers/${img.name}"))
+                                        img.inputStream().use { it.copyTo(zip) }
+                                        zip.closeEntry()
+                                    }
+                                }
+                            }
+                            file
+                        }
+                        val uri = FileProvider.getUriForFile(context, "com.gamegear.fileprovider", zipFile)
+                        val intent = Intent(Intent.ACTION_SEND).apply {
+                            type = "application/zip"
+                            putExtra(Intent.EXTRA_STREAM, uri)
+                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                        }
+                        context.startActivity(Intent.createChooser(intent, "Share Backup"))
+                    }
+                }) { Text("Database + Images") }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    showBackupOptionsDialog = false
+                    scope.launch {
+                        val content = vm.buildSaveContent()
+                        val timestamp = java.time.LocalDateTime.now()
+                            .format(java.time.format.DateTimeFormatter.ofPattern("ddMMyyyy_HHmm"))
+                        val file = File(context.cacheDir, "gamegear_backup_${timestamp}.json")
+                        file.writeText(content)
+                        val uri = FileProvider.getUriForFile(context, "com.gamegear.fileprovider", file)
+                        val intent = Intent(Intent.ACTION_SEND).apply {
+                            type = "application/json"
+                            putExtra(Intent.EXTRA_STREAM, uri)
+                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                        }
+                        context.startActivity(Intent.createChooser(intent, "Share Backup"))
+                    }
+                }) { Text("Database Only") }
             },
         )
     }
@@ -156,44 +231,11 @@ fun SettingsScreen(
                 color = MaterialTheme.colorScheme.primary,
             )
 
-            // Save current state to a user-chosen file (SAF-accessible)
-            Button(
-                onClick = {
-                    scope.launch {
-                        pendingSaveContent = vm.buildSaveContent()
-                        createFileLauncher.launch("gamegear_save.json")
-                    }
-                },
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text("Save Now")
-            }
-
-            // Share save as a file via the system share sheet
             OutlinedButton(
-                onClick = {
-                    scope.launch {
-                        val content = vm.buildSaveContent()
-                        val timestamp = java.time.LocalDateTime.now()
-                            .format(java.time.format.DateTimeFormatter.ofPattern("ddMMyyyy_HH:mm"))
-                        val file = File(context.cacheDir, "gamegear_backup_${timestamp}.json")
-                        file.writeText(content)
-                        val uri = FileProvider.getUriForFile(
-                            context,
-                            "com.gamegear.fileprovider",
-                            file,
-                        )
-                        val intent = Intent(Intent.ACTION_SEND).apply {
-                            type = "application/json"
-                            putExtra(Intent.EXTRA_STREAM, uri)
-                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                        }
-                        context.startActivity(Intent.createChooser(intent, "Share Backup"))
-                    }
-                },
+                onClick = { showBackupOptionsDialog = true },
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                Text("Share Backup")
+                Text("Backup")
             }
 
             // Load from a previously saved file
@@ -201,7 +243,7 @@ fun SettingsScreen(
                 onClick = { openFileLauncher.launch(arrayOf("*/*")) },
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                Text("Load Save File")
+                Text("Load Backup")
             }
 
             // Destructive reset
@@ -258,26 +300,15 @@ fun SettingsScreen(
                 )
             }
 
-            OutlinedButton(
-                onClick = {
-                    scope.launch {
-                        withContext(Dispatchers.IO) {
-                            Coil.imageLoader(context).diskCache?.clear()
-                        }
-                        cacheClearMessage = "Image cache cleared"
-                    }
-                },
+            Button(
+                onClick = { showDeleteImagesDialog = true },
                 modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.errorContainer,
+                    contentColor = MaterialTheme.colorScheme.onErrorContainer,
+                ),
             ) {
-                Text("Clear Image Cache")
-            }
-
-            cacheClearMessage?.let {
-                Text(
-                    text = it,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+                Text("Delete All Images")
             }
         }
     }
