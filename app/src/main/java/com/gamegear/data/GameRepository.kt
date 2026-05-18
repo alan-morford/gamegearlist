@@ -71,8 +71,14 @@ class GameRepository(
         dao.updateTitle(gameId, title)
     }
 
-    suspend fun setCoverImage(gameId: Int, imageUrl: String) =
-        dao.updateCoverImageId(gameId, imageUrl)
+    suspend fun setCoverImage(gameId: Int, imageUrl: String) {
+        if (imageUrl.startsWith("http")) {
+            val localUri = downloadImageToFile(gameId, imageUrl)
+            dao.updateCoverImageId(gameId, localUri ?: imageUrl)
+        } else {
+            dao.updateCoverImageId(gameId, imageUrl)
+        }
+    }
 
     suspend fun migrateLegacyCoverImages(contentResolver: ContentResolver) {
         dao.getAllGamesList()

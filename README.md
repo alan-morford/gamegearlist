@@ -5,6 +5,7 @@ A personal collection tracker for Android for the Sega Game Gear library. Browse
 **Game List**
 - Full Sega Game Gear library loaded from a bundled `games.json` asset
 - Manually reorderable list — long-press any row and drag to reorder; order persists to the database
+- While reordering, the list auto-scrolls with an exponential speed curve (slow near center, very fast near the top/bottom visible row); the dragged item stays under the finger throughout and is clamped so it never disappears at list boundaries
 - Drag handle shown on every row when the list is unfiltered; hidden when search or filters are active
 - Search bar — searches both title and notes fields; back button clears the search and scrolls to top
 - Permanent clear (✕) button in the search bar
@@ -12,6 +13,8 @@ A personal collection tracker for Android for the Sega Game Gear library. Browse
 - Region exclusives filter: cycles through JP Only / US Only / EU Only; chip maintains a fixed width so the row never shifts
 - Owned games marked with a checkmark icon
 - Configurable list title (saved to SharedPreferences, editable in Settings)
+- Thin scrollbar on the right edge — fades in while scrolling, fades out when stopped; tap-and-hold anywhere in the right 48 dp to drag-scroll directly (scrollbar widens while held)
+- Fast-scroll letter indicator — a small translucent letter badge appears at the right edge during high-speed flings or scrollbar drags, showing the first meaningful letter of the topmost visible game (leading "The " is ignored)
 
 **Game Detail**
 - Swipe left/right to navigate to the previous or next game in the current list order
@@ -28,6 +31,7 @@ A personal collection tracker for Android for the Sega Game Gear library. Browse
 - Image gallery viewer for a game's available art; image search button in the gallery to find more
 - Bulk "Scan Missing Images" in Settings — queries IGDB first (bulk), then falls back to TGDB (per-game) for any still missing
 - All scanned images are downloaded to local `file://` storage immediately — no internet connection needed to view them after scanning
+- Manually picked images (via the image picker) are also downloaded to local `file://` storage immediately on selection, so they are always included in backups
 - On app launch, any images previously stored as remote URLs are automatically migrated to local files in the background
 - Local file picker to set a custom cover image from your device
 - "Delete All Images" in Settings — removes all cover images from disk and the database (with confirmation dialog); images can be restored with Scan Missing Images

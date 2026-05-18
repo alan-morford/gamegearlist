@@ -4,6 +4,7 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -50,6 +51,7 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -72,6 +74,24 @@ import com.gamegear.data.GameEntity
 import com.gamegear.data.GameRepository
 import com.gamegear.network.GameImageUrl
 import kotlin.math.roundToInt
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.snapshotFlow
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlin.math.abs
+import kotlin.math.exp
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -95,11 +115,56 @@ fun GameListScreen(
     val scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior(topAppBarState)
     var shouldScrollToTop by remember { mutableStateOf(false) }
 
+    val coroutineScope = rememberCoroutineScope()
     val draggableGames = remember { mutableStateListOf<GameEntity>() }
     var draggedIndex by remember { mutableIntStateOf(-1) }
     var dragOffsetY by remember { mutableFloatStateOf(0f) }
+    var dragPositionY by remember { mutableFloatStateOf(0f) }
+    var isScrollbarDragging by remember { mutableStateOf(false) }
     val isDragging = draggedIndex >= 0
     val dragEnabled = query.isBlank() && filter == GameFilter.ALL && regionFilter == RegionFilter.ALL
+
+    val scrollbarAlpha by animateFloatAsState(
+        targetValue = if (scrollState.isScrollInProgress) 1f else 0f,
+        animationSpec = tween(durationMillis = if (scrollState.isScrollInProgress) 0 else 800),
+        label = "scrollbar",
+    )
+    var showLetterPopup by remember { mutableStateOf(false) }
+    val currentLetter by remember {
+        derivedStateOf {
+            val title = draggableGames.getOrNull(scrollState.firstVisibleItemIndex)?.title ?: ""
+            val effective = if (title.startsWith("the ", ignoreCase = true)) title.drop(4) else title
+            effective.firstOrNull { it.isLetterOrDigit() }?.uppercaseChar()?.toString() ?: ""
+        }
+    }
+    LaunchedEffect(scrollState) {
+        val scope = this
+        var prevIndex = scrollState.firstVisibleItemIndex
+        var prevTime = System.currentTimeMillis()
+        var hideJob: Job? = null
+        snapshotFlow { scrollState.firstVisibleItemIndex to scrollState.isScrollInProgress }
+            .collect { (index, isScrolling) ->
+                val now = System.currentTimeMillis()
+                val dt = now - prevTime
+                val delta = abs(index - prevIndex).toFloat()
+                prevIndex = index
+                prevTime = now
+                if (isScrolling && dt in 1L..500L) {
+                    val itemsPerSecond = delta / dt * 1000f
+                    if (itemsPerSecond >= 15f) {
+                        hideJob?.cancel()
+                        showLetterPopup = true
+                    }
+                }
+                if (!isScrolling) {
+                    hideJob?.cancel()
+                    hideJob = scope.launch {
+                        delay(600)
+                        showLetterPopup = false
+                    }
+                }
+            }
+    }
 
     BackHandler(enabled = query.isNotEmpty()) {
         vm.searchQuery.value = ""
@@ -130,6 +195,32 @@ fun GameListScreen(
         if (!dragEnabled) {
             draggedIndex = -1
             dragOffsetY = 0f
+        }
+    }
+
+    LaunchedEffect(isDragging) {
+        if (!isDragging) return@LaunchedEffect
+        while (draggedIndex >= 0) {
+            val info = scrollState.layoutInfo
+            val viewportH = (info.viewportEndOffset - info.viewportStartOffset).toFloat()
+
+            if (dragPositionY < 0f || dragPositionY > viewportH) {
+                vm.persistReorder(draggableGames.map { it.id })
+                draggedIndex = -1
+                dragOffsetY = 0f
+                break
+            }
+
+            // f: 0 at center, +1 at top edge, -1 at bottom edge
+            val center = viewportH / 2f
+            val f = ((center - dragPositionY) / center).coerceIn(-1f, 1f)
+            val absFraction = abs(f)
+            // exponential ramp: nearly zero near center, very fast near top/bottom visible row
+            val speed = 60f * (exp(4f * absFraction) - 1f) / (exp(4f) - 1f)
+            val scrollAmount = -f * speed   // positive f (near top) → scroll up (negative)
+
+            if (scrollAmount != 0f) dragOffsetY += scrollState.scrollBy(scrollAmount)
+            delay(16L)
         }
     }
 
@@ -196,64 +287,125 @@ fun GameListScreen(
                 )
             }
         } else {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(innerPadding),
+            ) {
             LazyColumn(
                 state = scrollState,
                 modifier = Modifier
-                    .padding(innerPadding)
-                    .then(
-                        if (dragEnabled) {
-                            Modifier.pointerInput(dragEnabled) {
-                                detectDragGesturesAfterLongPress(
-                                    onDragStart = { offset ->
-                                        val item = scrollState.layoutInfo.visibleItemsInfo
-                                            .firstOrNull { offset.y.toInt() in it.offset..(it.offset + it.size) }
-                                        item?.let {
-                                            draggedIndex = it.index
-                                            dragOffsetY = 0f
+                    .fillMaxSize()
+                    .drawWithContent {
+                        drawContent()
+                        val info = scrollState.layoutInfo
+                        val total = info.totalItemsCount
+                        val visible = info.visibleItemsInfo
+                        val effectiveAlpha = if (isScrollbarDragging) 1f else scrollbarAlpha
+                        if (total > 0 && visible.isNotEmpty() && effectiveAlpha > 0f) {
+                            val viewH = (info.viewportEndOffset - info.viewportStartOffset).toFloat()
+                            val avgItem = visible.sumOf { it.size }.toFloat() / visible.size
+                            val estimatedTotal = total * avgItem
+                            val thumbH = (viewH / estimatedTotal * viewH).coerceIn(40f, viewH * 0.4f)
+                            val scrolled = scrollState.firstVisibleItemIndex * avgItem + scrollState.firstVisibleItemScrollOffset
+                            val maxScroll = (estimatedTotal - viewH).coerceAtLeast(1f)
+                            val fraction = (scrolled / maxScroll).coerceIn(0f, 1f)
+                            val thumbTop = fraction * (viewH - thumbH)
+                            val trackW = if (isScrollbarDragging) 8.dp.toPx() else 6.dp.toPx()
+                            val trackX = size.width - trackW - 4.dp.toPx()
+                            drawRect(
+                                color = Color(0xFF888888).copy(alpha = 0.15f * effectiveAlpha),
+                                topLeft = Offset(trackX, 0f),
+                                size = Size(trackW, viewH),
+                            )
+                            drawRoundRect(
+                                color = Color(0xFF888888).copy(alpha = 0.6f * effectiveAlpha),
+                                topLeft = Offset(trackX, thumbTop),
+                                size = Size(trackW, thumbH),
+                                cornerRadius = CornerRadius(trackW / 2),
+                            )
+                        }
+                    }
+                    .pointerInput(dragEnabled) {
+                        val scrollbarTapZone = 48.dp.toPx()
+                        detectDragGesturesAfterLongPress(
+                            onDragStart = { offset ->
+                                if (offset.x >= size.width - scrollbarTapZone) {
+                                    isScrollbarDragging = true
+                                } else if (dragEnabled) {
+                                    val item = scrollState.layoutInfo.visibleItemsInfo
+                                        .firstOrNull { offset.y.toInt() in it.offset..(it.offset + it.size) }
+                                    item?.let {
+                                        draggedIndex = it.index
+                                        dragOffsetY = 0f
+                                        dragPositionY = offset.y
+                                    }
+                                }
+                            },
+                            onDrag = { change, dragAmount ->
+                                change.consume()
+                                if (isScrollbarDragging) {
+                                    val info = scrollState.layoutInfo
+                                    val viewH = (info.viewportEndOffset - info.viewportStartOffset).toFloat()
+                                    val visible = info.visibleItemsInfo
+                                    if (visible.isNotEmpty() && info.totalItemsCount > 0) {
+                                        val avgItem = visible.sumOf { it.size }.toFloat() / visible.size
+                                        val estimatedTotal = info.totalItemsCount * avgItem
+                                        coroutineScope.launch {
+                                            scrollState.scrollBy(dragAmount.y * estimatedTotal / viewH)
                                         }
-                                    },
-                                    onDrag = { change, dragAmount ->
-                                        change.consume()
-                                        if (draggedIndex >= 0) {
-                                            dragOffsetY += dragAmount.y
-                                            val visibleItems = scrollState.layoutInfo.visibleItemsInfo
-                                            val draggedItem = visibleItems.firstOrNull { it.index == draggedIndex }
-                                                ?: return@detectDragGesturesAfterLongPress
-                                            val draggedCenter = draggedItem.offset + draggedItem.size / 2 + dragOffsetY.toInt()
-                                            if (dragOffsetY > 0 && draggedIndex < draggableGames.size - 1) {
-                                                val nextItem = visibleItems.firstOrNull { it.index == draggedIndex + 1 }
-                                                if (nextItem != null && draggedCenter > nextItem.offset + nextItem.size / 2) {
-                                                    draggableGames.add(draggedIndex + 1, draggableGames.removeAt(draggedIndex))
-                                                    dragOffsetY -= (nextItem.offset - draggedItem.offset).toFloat()
-                                                    draggedIndex++
-                                                }
-                                            } else if (dragOffsetY < 0 && draggedIndex > 0) {
-                                                val prevItem = visibleItems.firstOrNull { it.index == draggedIndex - 1 }
-                                                if (prevItem != null && draggedCenter < prevItem.offset + prevItem.size / 2) {
-                                                    draggableGames.add(draggedIndex - 1, draggableGames.removeAt(draggedIndex))
-                                                    dragOffsetY += (draggedItem.offset - prevItem.offset).toFloat()
-                                                    draggedIndex--
-                                                }
+                                    }
+                                } else {
+                                    dragPositionY = change.position.y
+                                    if (draggedIndex >= 0) {
+                                        dragOffsetY += dragAmount.y
+                                        val visibleItems = scrollState.layoutInfo.visibleItemsInfo
+                                        val draggedItem = visibleItems.firstOrNull { it.index == draggedIndex }
+                                            ?: return@detectDragGesturesAfterLongPress
+                                        val viewportH = (scrollState.layoutInfo.viewportEndOffset - scrollState.layoutInfo.viewportStartOffset).toFloat()
+                                        dragOffsetY = dragOffsetY.coerceIn(
+                                            -draggedItem.offset.toFloat(),
+                                            viewportH - draggedItem.offset - draggedItem.size,
+                                        )
+                                        val draggedCenter = draggedItem.offset + draggedItem.size / 2 + dragOffsetY.toInt()
+                                        if (dragOffsetY > 0 && draggedIndex < draggableGames.size - 1) {
+                                            val nextItem = visibleItems.firstOrNull { it.index == draggedIndex + 1 }
+                                            if (nextItem != null && draggedCenter > nextItem.offset + nextItem.size / 2) {
+                                                draggableGames.add(draggedIndex + 1, draggableGames.removeAt(draggedIndex))
+                                                dragOffsetY -= (nextItem.offset - draggedItem.offset).toFloat()
+                                                draggedIndex++
+                                            }
+                                        } else if (dragOffsetY < 0 && draggedIndex > 0) {
+                                            val prevItem = visibleItems.firstOrNull { it.index == draggedIndex - 1 }
+                                            if (prevItem != null && draggedCenter < prevItem.offset + prevItem.size / 2) {
+                                                draggableGames.add(draggedIndex - 1, draggableGames.removeAt(draggedIndex))
+                                                dragOffsetY += (draggedItem.offset - prevItem.offset).toFloat()
+                                                draggedIndex--
                                             }
                                         }
-                                    },
-                                    onDragEnd = {
-                                        if (draggedIndex >= 0) {
-                                            vm.persistReorder(draggableGames.map { it.id })
-                                        }
-                                        draggedIndex = -1
-                                        dragOffsetY = 0f
-                                    },
-                                    onDragCancel = {
-                                        draggableGames.clear()
-                                        draggableGames.addAll(dbGames)
-                                        draggedIndex = -1
-                                        dragOffsetY = 0f
-                                    },
-                                )
-                            }
-                        } else Modifier
-                    ),
+                                    }
+                                }
+                            },
+                            onDragEnd = {
+                                if (isScrollbarDragging) {
+                                    isScrollbarDragging = false
+                                } else {
+                                    if (draggedIndex >= 0) {
+                                        vm.persistReorder(draggableGames.map { it.id })
+                                    }
+                                    draggedIndex = -1
+                                    dragOffsetY = 0f
+                                }
+                            },
+                            onDragCancel = {
+                                isScrollbarDragging = false
+                                draggableGames.clear()
+                                draggableGames.addAll(dbGames)
+                                draggedIndex = -1
+                                dragOffsetY = 0f
+                            },
+                        )
+                    },
             ) {
                 itemsIndexed(draggableGames, key = { _, g -> g.id }) { index, game ->
                     val isDragged = dragEnabled && index == draggedIndex
@@ -275,6 +427,28 @@ fun GameListScreen(
                         thickness = 0.5.dp,
                     )
                 }
+            }
+            AnimatedVisibility(
+                visible = showLetterPopup && currentLetter.isNotEmpty(),
+                enter = fadeIn() + scaleIn(initialScale = 0.8f),
+                exit = fadeOut() + scaleOut(targetScale = 0.8f),
+                modifier = Modifier
+                    .align(Alignment.CenterEnd)
+                    .padding(end = 32.dp),
+            ) {
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f),
+                    shadowElevation = 2.dp,
+                ) {
+                    Text(
+                        text = currentLetter,
+                        style = MaterialTheme.typography.titleLarge,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer,
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                    )
+                }
+            }
             }
         }
     }
