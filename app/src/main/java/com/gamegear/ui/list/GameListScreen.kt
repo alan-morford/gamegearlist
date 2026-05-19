@@ -3,6 +3,7 @@ package com.gamegear.ui.list
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.layout.Arrangement
@@ -51,7 +52,6 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -88,6 +88,8 @@ import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.abs
@@ -115,7 +117,6 @@ fun GameListScreen(
     val scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior(topAppBarState)
     var shouldScrollToTop by remember { mutableStateOf(false) }
 
-    val coroutineScope = rememberCoroutineScope()
     val draggableGames = remember { mutableStateListOf<GameEntity>() }
     var draggedIndex by remember { mutableIntStateOf(-1) }
     var dragOffsetY by remember { mutableFloatStateOf(0f) }
@@ -125,8 +126,8 @@ fun GameListScreen(
     val dragEnabled = query.isBlank() && filter == GameFilter.ALL && regionFilter == RegionFilter.ALL
 
     val scrollbarAlpha by animateFloatAsState(
-        targetValue = if (scrollState.isScrollInProgress) 1f else 0f,
-        animationSpec = tween(durationMillis = if (scrollState.isScrollInProgress) 0 else 800),
+        targetValue = if (scrollState.isScrollInProgress || isScrollbarDragging) 1f else 0.45f,
+        animationSpec = tween(durationMillis = if (scrollState.isScrollInProgress || isScrollbarDragging) 0 else 600),
         label = "scrollbar",
     )
     var showLetterPopup by remember { mutableStateOf(false) }
@@ -219,7 +220,36 @@ fun GameListScreen(
             val speed = 60f * (exp(4f * absFraction) - 1f) / (exp(4f) - 1f)
             val scrollAmount = -f * speed   // positive f (near top) → scroll up (negative)
 
-            if (scrollAmount != 0f) dragOffsetY += scrollState.scrollBy(scrollAmount)
+            if (scrollAmount != 0f) {
+                dragOffsetY += scrollState.scrollBy(scrollAmount)
+                // Swap the dragged item with any neighbor it crossed during this scroll frame.
+                // Stale layoutInfo offsets are fine: both items shift by the same scroll delta,
+                // so the relative comparison and the offset correction are both still correct.
+                val visibleItems = scrollState.layoutInfo.visibleItemsInfo
+                var swapped = true
+                while (swapped) {
+                    swapped = false
+                    val draggedItem = visibleItems.firstOrNull { it.index == draggedIndex } ?: break
+                    val draggedCenter = draggedItem.offset + draggedItem.size / 2 + dragOffsetY.toInt()
+                    if (scrollAmount < 0 && draggedIndex > 0) {
+                        val prevItem = visibleItems.firstOrNull { it.index == draggedIndex - 1 }
+                        if (prevItem != null && draggedCenter < prevItem.offset + prevItem.size / 2) {
+                            draggableGames.add(draggedIndex - 1, draggableGames.removeAt(draggedIndex))
+                            dragOffsetY += (draggedItem.offset - prevItem.offset).toFloat()
+                            draggedIndex--
+                            swapped = true
+                        }
+                    } else if (scrollAmount > 0 && draggedIndex < draggableGames.size - 1) {
+                        val nextItem = visibleItems.firstOrNull { it.index == draggedIndex + 1 }
+                        if (nextItem != null && draggedCenter > nextItem.offset + nextItem.size / 2) {
+                            draggableGames.add(draggedIndex + 1, draggableGames.removeAt(draggedIndex))
+                            dragOffsetY -= (nextItem.offset - draggedItem.offset).toFloat()
+                            draggedIndex++
+                            swapped = true
+                        }
+                    }
+                }
+            }
             delay(16L)
         }
     }
@@ -301,8 +331,7 @@ fun GameListScreen(
                         val info = scrollState.layoutInfo
                         val total = info.totalItemsCount
                         val visible = info.visibleItemsInfo
-                        val effectiveAlpha = if (isScrollbarDragging) 1f else scrollbarAlpha
-                        if (total > 0 && visible.isNotEmpty() && effectiveAlpha > 0f) {
+                        if (total > 0 && visible.isNotEmpty()) {
                             val viewH = (info.viewportEndOffset - info.viewportStartOffset).toFloat()
                             val avgItem = visible.sumOf { it.size }.toFloat() / visible.size
                             val estimatedTotal = total * avgItem
@@ -311,28 +340,70 @@ fun GameListScreen(
                             val maxScroll = (estimatedTotal - viewH).coerceAtLeast(1f)
                             val fraction = (scrolled / maxScroll).coerceIn(0f, 1f)
                             val thumbTop = fraction * (viewH - thumbH)
-                            val trackW = if (isScrollbarDragging) 8.dp.toPx() else 6.dp.toPx()
+                            val trackW = if (isScrollbarDragging) 14.dp.toPx() else 10.dp.toPx()
                             val trackX = size.width - trackW - 4.dp.toPx()
                             drawRect(
-                                color = Color(0xFF888888).copy(alpha = 0.15f * effectiveAlpha),
+                                color = Color(0xFF888888).copy(alpha = 0.15f * scrollbarAlpha),
                                 topLeft = Offset(trackX, 0f),
                                 size = Size(trackW, viewH),
                             )
                             drawRoundRect(
-                                color = Color(0xFF888888).copy(alpha = 0.6f * effectiveAlpha),
+                                color = Color(0xFF888888).copy(alpha = 0.6f * scrollbarAlpha),
                                 topLeft = Offset(trackX, thumbTop),
                                 size = Size(trackW, thumbH),
                                 cornerRadius = CornerRadius(trackW / 2),
                             )
                         }
                     }
+                    .pointerInput(Unit) {
+                        val tapZone = 48.dp.toPx()
+                        coroutineScope {
+                            val scrollChannel = Channel<Float>(Channel.CONFLATED)
+                            // Unrestricted consumer: can call suspend scrollBy
+                            launch {
+                                for (delta in scrollChannel) scrollState.scrollBy(delta)
+                            }
+                            // Gesture detector: restricted AwaitPointerEventScope, uses channel
+                            launch {
+                                awaitEachGesture {
+                                    // Wait for a fresh finger-down event
+                                    var downEvent = awaitPointerEvent()
+                                    while (downEvent.changes.none { it.pressed && !it.previousPressed }) {
+                                        downEvent = awaitPointerEvent()
+                                    }
+                                    val down = downEvent.changes.first { it.pressed && !it.previousPressed }
+                                    if (down.position.x < size.width - tapZone) return@awaitEachGesture
+                                    isScrollbarDragging = true
+                                    down.consume()
+                                    try {
+                                        while (true) {
+                                            val event = awaitPointerEvent()
+                                            val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                                            if (!change.pressed) break
+                                            change.consume()
+                                            val dy = change.position.y - change.previousPosition.y
+                                            if (dy != 0f) {
+                                                val info = scrollState.layoutInfo
+                                                val viewH = (info.viewportEndOffset - info.viewportStartOffset).toFloat()
+                                                val visible = info.visibleItemsInfo
+                                                if (visible.isNotEmpty() && info.totalItemsCount > 0) {
+                                                    val avgItem = visible.sumOf { it.size }.toFloat() / visible.size
+                                                    scrollChannel.trySend(dy * info.totalItemsCount * avgItem / viewH)
+                                                }
+                                            }
+                                        }
+                                    } finally {
+                                        isScrollbarDragging = false
+                                    }
+                                }
+                            }
+                        }
+                    }
                     .pointerInput(dragEnabled) {
                         val scrollbarTapZone = 48.dp.toPx()
                         detectDragGesturesAfterLongPress(
                             onDragStart = { offset ->
-                                if (offset.x >= size.width - scrollbarTapZone) {
-                                    isScrollbarDragging = true
-                                } else if (dragEnabled) {
+                                if (dragEnabled && offset.x < size.width - scrollbarTapZone) {
                                     val item = scrollState.layoutInfo.visibleItemsInfo
                                         .firstOrNull { offset.y.toInt() in it.offset..(it.offset + it.size) }
                                     item?.let {
@@ -344,61 +415,43 @@ fun GameListScreen(
                             },
                             onDrag = { change, dragAmount ->
                                 change.consume()
-                                if (isScrollbarDragging) {
-                                    val info = scrollState.layoutInfo
-                                    val viewH = (info.viewportEndOffset - info.viewportStartOffset).toFloat()
-                                    val visible = info.visibleItemsInfo
-                                    if (visible.isNotEmpty() && info.totalItemsCount > 0) {
-                                        val avgItem = visible.sumOf { it.size }.toFloat() / visible.size
-                                        val estimatedTotal = info.totalItemsCount * avgItem
-                                        coroutineScope.launch {
-                                            scrollState.scrollBy(dragAmount.y * estimatedTotal / viewH)
+                                dragPositionY = change.position.y
+                                if (draggedIndex >= 0) {
+                                    dragOffsetY += dragAmount.y
+                                    val visibleItems = scrollState.layoutInfo.visibleItemsInfo
+                                    val draggedItem = visibleItems.firstOrNull { it.index == draggedIndex }
+                                        ?: return@detectDragGesturesAfterLongPress
+                                    val viewportH = (scrollState.layoutInfo.viewportEndOffset - scrollState.layoutInfo.viewportStartOffset).toFloat()
+                                    dragOffsetY = dragOffsetY.coerceIn(
+                                        -draggedItem.offset.toFloat(),
+                                        viewportH - draggedItem.offset - draggedItem.size,
+                                    )
+                                    val draggedCenter = draggedItem.offset + draggedItem.size / 2 + dragOffsetY.toInt()
+                                    if (dragOffsetY > 0 && draggedIndex < draggableGames.size - 1) {
+                                        val nextItem = visibleItems.firstOrNull { it.index == draggedIndex + 1 }
+                                        if (nextItem != null && draggedCenter > nextItem.offset + nextItem.size / 2) {
+                                            draggableGames.add(draggedIndex + 1, draggableGames.removeAt(draggedIndex))
+                                            dragOffsetY -= (nextItem.offset - draggedItem.offset).toFloat()
+                                            draggedIndex++
                                         }
-                                    }
-                                } else {
-                                    dragPositionY = change.position.y
-                                    if (draggedIndex >= 0) {
-                                        dragOffsetY += dragAmount.y
-                                        val visibleItems = scrollState.layoutInfo.visibleItemsInfo
-                                        val draggedItem = visibleItems.firstOrNull { it.index == draggedIndex }
-                                            ?: return@detectDragGesturesAfterLongPress
-                                        val viewportH = (scrollState.layoutInfo.viewportEndOffset - scrollState.layoutInfo.viewportStartOffset).toFloat()
-                                        dragOffsetY = dragOffsetY.coerceIn(
-                                            -draggedItem.offset.toFloat(),
-                                            viewportH - draggedItem.offset - draggedItem.size,
-                                        )
-                                        val draggedCenter = draggedItem.offset + draggedItem.size / 2 + dragOffsetY.toInt()
-                                        if (dragOffsetY > 0 && draggedIndex < draggableGames.size - 1) {
-                                            val nextItem = visibleItems.firstOrNull { it.index == draggedIndex + 1 }
-                                            if (nextItem != null && draggedCenter > nextItem.offset + nextItem.size / 2) {
-                                                draggableGames.add(draggedIndex + 1, draggableGames.removeAt(draggedIndex))
-                                                dragOffsetY -= (nextItem.offset - draggedItem.offset).toFloat()
-                                                draggedIndex++
-                                            }
-                                        } else if (dragOffsetY < 0 && draggedIndex > 0) {
-                                            val prevItem = visibleItems.firstOrNull { it.index == draggedIndex - 1 }
-                                            if (prevItem != null && draggedCenter < prevItem.offset + prevItem.size / 2) {
-                                                draggableGames.add(draggedIndex - 1, draggableGames.removeAt(draggedIndex))
-                                                dragOffsetY += (draggedItem.offset - prevItem.offset).toFloat()
-                                                draggedIndex--
-                                            }
+                                    } else if (dragOffsetY < 0 && draggedIndex > 0) {
+                                        val prevItem = visibleItems.firstOrNull { it.index == draggedIndex - 1 }
+                                        if (prevItem != null && draggedCenter < prevItem.offset + prevItem.size / 2) {
+                                            draggableGames.add(draggedIndex - 1, draggableGames.removeAt(draggedIndex))
+                                            dragOffsetY += (draggedItem.offset - prevItem.offset).toFloat()
+                                            draggedIndex--
                                         }
                                     }
                                 }
                             },
                             onDragEnd = {
-                                if (isScrollbarDragging) {
-                                    isScrollbarDragging = false
-                                } else {
-                                    if (draggedIndex >= 0) {
-                                        vm.persistReorder(draggableGames.map { it.id })
-                                    }
-                                    draggedIndex = -1
-                                    dragOffsetY = 0f
+                                if (draggedIndex >= 0) {
+                                    vm.persistReorder(draggableGames.map { it.id })
                                 }
+                                draggedIndex = -1
+                                dragOffsetY = 0f
                             },
                             onDragCancel = {
-                                isScrollbarDragging = false
                                 draggableGames.clear()
                                 draggableGames.addAll(dbGames)
                                 draggedIndex = -1

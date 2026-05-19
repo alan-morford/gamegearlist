@@ -5,7 +5,7 @@ A personal collection tracker for Android for the Sega Game Gear library. Browse
 **Game List**
 - Full Sega Game Gear library loaded from a bundled `games.json` asset
 - Manually reorderable list — long-press any row and drag to reorder; order persists to the database
-- While reordering, the list auto-scrolls with an exponential speed curve (slow near center, very fast near the top/bottom visible row); the dragged item stays under the finger throughout and is clamped so it never disappears at list boundaries
+- While reordering, the list auto-scrolls with an exponential speed curve (slow near center, very fast near the top/bottom visible row); the item continuously swaps with neighbors on every scroll frame even when the finger is stationary, stays pinned under the finger throughout, and is clamped so it never disappears at list boundaries
 - Drag handle shown on every row when the list is unfiltered; hidden when search or filters are active
 - Search bar — searches both title and notes fields; back button clears the search and scrolls to top
 - Permanent clear (✕) button in the search bar
@@ -13,7 +13,7 @@ A personal collection tracker for Android for the Sega Game Gear library. Browse
 - Region exclusives filter: cycles through JP Only / US Only / EU Only; chip maintains a fixed width so the row never shifts
 - Owned games marked with a checkmark icon
 - Configurable list title (saved to SharedPreferences, editable in Settings)
-- Thin scrollbar on the right edge — fades in while scrolling, fades out when stopped; tap-and-hold anywhere in the right 48 dp to drag-scroll directly (scrollbar widens while held)
+- Persistent scrollbar on the right edge — always visible at reduced opacity, full opacity while scrolling; tap and immediately drag anywhere in the right 48 dp to jump directly to any position (scrollbar widens to 14 dp while held)
 - Fast-scroll letter indicator — a small translucent letter badge appears at the right edge during high-speed flings or scrollbar drags, showing the first meaningful letter of the topmost visible game (leading "The " is ignored)
 
 **Game Detail**
